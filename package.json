@@ -2,7 +2,7 @@
   "name": "cli-command-buttons",
   "displayName": "CLI Command Buttons",
   "description": "A VSCode extension with customizable CLI command buttons",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "engines": {
     "vscode": "^1.74.0"
   },
@@ -22,7 +22,11 @@
         "cliCommandButtons.terminalBehavior": {
           "type": "string",
           "default": "reuse",
-          "enum": ["reuse", "alwaysNew", "reuseActive"],
+          "enum": [
+            "reuse",
+            "alwaysNew",
+            "reuseActive"
+          ],
           "enumDescriptions": [
             "Reuse any idle terminal",
             "Always create a new terminal",
