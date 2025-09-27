@@ -6,6 +6,9 @@
   "engines": {
     "vscode": "^1.74.0"
   },
+  "repository": {
+    "url": "https://github.com/okoyfoeciov/cli-command-buttons.git"
+  },
   "publisher": "Zorpulonix",
   "categories": ["Other"],
   "activationEvents": [],
