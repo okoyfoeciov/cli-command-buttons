@@ -1,0 +1,105 @@
+{
+  "name": "cli-command-buttons",
+  "displayName": "CLI Command Buttons",
+  "description": "A VSCode extension with customizable CLI command buttons",
+  "version": "1.0.0",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "publisher": "Zorpulonix",
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "CLI Command Buttons",
+      "properties": {
+        "cliCommandButtons.terminalBehavior": {
+          "type": "string",
+          "default": "reuse",
+          "enum": ["reuse", "alwaysNew", "reuseActive"],
+          "enumDescriptions": [
+            "Reuse any idle terminal",
+            "Always create a new terminal",
+            "Only reuse the active terminal"
+          ],
+          "description": "How to handle terminal selection when executing commands"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "cli-command-buttons.addCommand",
+        "title": "Add New Command",
+        "icon": "$(add)",
+        "category": "CLI Buttons"
+      },
+      {
+        "command": "cli-command-buttons.executeCommand",
+        "title": "Execute Command",
+        "category": "CLI Buttons"
+      },
+      {
+        "command": "cli-command-buttons.deleteCommand",
+        "title": "Delete Command",
+        "icon": "$(trash)",
+        "category": "CLI Buttons"
+      },
+      {
+        "command": "cli-command-buttons.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)",
+        "category": "CLI Buttons"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "cli-command-buttons",
+          "title": "CLI Command Buttons",
+          "icon": "$(terminal)"
+        }
+      ]
+    },
+    "views": {
+      "cli-command-buttons": [
+        {
+          "id": "cliCommandButtonsView",
+          "name": "Command Buttons",
+          "when": "true"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "cli-command-buttons.addCommand",
+          "when": "view == cliCommandButtonsView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cli-command-buttons.refresh",
+          "when": "view == cliCommandButtonsView",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "cli-command-buttons.deleteCommand",
+          "when": "view == cliCommandButtonsView && viewItem == commandItem",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/node": "16.x",
+    "typescript": "^4.9.4"
+  }
+}
