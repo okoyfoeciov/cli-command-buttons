@@ -43,6 +43,18 @@
         "category": "CLI Buttons"
       },
       {
+        "command": "cli-command-buttons.editCommandName",
+        "title": "Edit Command Name",
+        "icon": "$(edit)",
+        "category": "CLI Buttons"
+      },
+      {
+        "command": "cli-command-buttons.editCommandText",
+        "title": "Edit Command",
+        "icon": "$(code)",
+        "category": "CLI Buttons"
+      },
+      {
         "command": "cli-command-buttons.deleteCommand",
         "title": "Delete Command",
         "icon": "$(trash)",
@@ -88,9 +100,19 @@
       ],
       "view/item/context": [
         {
+          "command": "cli-command-buttons.editCommandName",
+          "when": "view == cliCommandButtonsView && viewItem == commandItem",
+          "group": "inline@1"
+        },
+        {
+          "command": "cli-command-buttons.editCommandText",
+          "when": "view == cliCommandButtonsView && viewItem == commandItem",
+          "group": "inline@2"
+        },
+        {
           "command": "cli-command-buttons.deleteCommand",
           "when": "view == cliCommandButtonsView && viewItem == commandItem",
-          "group": "inline"
+          "group": "inline@3"
         }
       ]
     }

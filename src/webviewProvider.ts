@@ -10,19 +10,18 @@ export class WebviewProvider {
     ) {}
 
     public createOrShow(): void {
-        const column = vscode.window.activeTextEditor
-            ? vscode.window.activeTextEditor.viewColumn
-            : undefined;
+        const column = vscode.ViewColumn.One;
 
         if (this.panel) {
             this.panel.reveal(column);
+            this.updateWebview();
             return;
         }
 
         this.panel = vscode.window.createWebviewPanel(
             'cliCommandButtons',
             'CLI Command Buttons',
-            column || vscode.ViewColumn.One,
+            column,
             {
                 enableScripts: true,
                 retainContextWhenHidden: true
@@ -35,33 +34,27 @@ export class WebviewProvider {
             async (message) => {
                 switch (message.type) {
                     case 'executeCommand':
-                        const terminal = vscode.window.createTerminal('CLI Command');
-                        terminal.show();
-                        terminal.sendText(message.command);
+                        vscode.commands.executeCommand(
+                            'cli-command-buttons.executeCommand',
+                            message.command,
+                            message.name
+                        );
                         break;
-                    case 'addCommand':
-                        const name = await vscode.window.showInputBox({
-                            prompt: 'Enter command name',
-                            placeHolder: 'e.g., Build Project'
-                        });
-
-                        if (!name) return;
-
-                        const command = await vscode.window.showInputBox({
-                            prompt: 'Enter CLI command',
-                            placeHolder: 'e.g., npm run build'
-                        });
-
-                        if (!command) return;
-
-                        this.commandProvider.addCommand(name, command);
-                        this.updateWebview();
+                    case 'updateCommandName':
+                        this.commandProvider.editCommandName(message.id, message.name);
+                        break;
+                    case 'updateCommandText':
+                        this.commandProvider.editCommandText(message.id, message.command);
                         break;
                     case 'deleteCommand':
                         this.commandProvider.deleteCommand(message.id);
                         this.updateWebview();
                         break;
-                    case 'refreshCommands':
+                    case 'addCommand':
+                        this.commandProvider.addCommand(message.name, message.command);
+                        this.updateWebview();
+                        break;
+                    case 'ready':
                         this.updateWebview();
                         break;
                 }
@@ -89,9 +82,6 @@ export class WebviewProvider {
     }
 
     private getWebviewContent(): string {
-        const commands = this.commandProvider.getCommands();
-        const commandsJson = JSON.stringify(commands);
-
         return `<!DOCTYPE html>
         <html lang="en">
         <head>
@@ -104,6 +94,7 @@ export class WebviewProvider {
                     padding: 20px;
                     background-color: var(--vscode-editor-background);
                     color: var(--vscode-editor-foreground);
+                    margin: 0;
                 }
                 
                 .header {
@@ -120,165 +111,233 @@ export class WebviewProvider {
                     font-size: 1.5em;
                 }
                 
-                .buttons-container {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-                    gap: 15px;
-                    margin-bottom: 20px;
-                }
-                
-                .command-button {
+                .add-button {
                     background-color: var(--vscode-button-background);
                     color: var(--vscode-button-foreground);
                     border: none;
-                    padding: 15px;
+                    padding: 8px 16px;
                     border-radius: 4px;
                     cursor: pointer;
                     font-size: 14px;
-                    font-weight: bold;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: flex-start;
-                    position: relative;
-                    transition: background-color 0.2s;
-                }
-                
-                .command-button:hover {
-                    background-color: var(--vscode-button-hoverBackground);
-                }
-                
-                .command-name {
-                    font-size: 16px;
-                    margin-bottom: 8px;
-                }
-                
-                .command-text {
-                    font-size: 12px;
-                    opacity: 0.8;
-                    font-family: monospace;
-                    background-color: var(--vscode-textCodeBlock-background);
-                    padding: 4px 6px;
-                    border-radius: 3px;
-                    word-break: break-all;
-                }
-                
-                .delete-button {
-                    position: absolute;
-                    top: 5px;
-                    right: 5px;
-                    background: var(--vscode-errorForeground);
-                    color: white;
-                    border: none;
-                    width: 20px;
-                    height: 20px;
-                    border-radius: 50%;
-                    cursor: pointer;
-                    font-size: 12px;
-                    display: none;
-                }
-                
-                .command-button:hover .delete-button {
-                    display: block;
-                }
-                
-                .add-button {
-                    background-color: var(--vscode-button-secondaryBackground);
-                    color: var(--vscode-button-secondaryForeground);
-                    border: 2px dashed var(--vscode-button-border);
-                    padding: 15px;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 16px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    min-height: 60px;
-                    transition: all 0.2s;
                 }
                 
                 .add-button:hover {
-                    background-color: var(--vscode-button-secondaryHoverBackground);
-                    border-color: var(--vscode-button-foreground);
+                    background-color: var(--vscode-button-hoverBackground);
+                }
+                
+                .commands-container {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                }
+                
+                .command-row {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    padding: 10px;
+                    background-color: var(--vscode-input-background);
+                    border: 1px solid var(--vscode-input-border);
+                    border-radius: 4px;
+                }
+                
+                .command-name-input {
+                    min-width: 150px;
+                    max-width: 200px;
+                    background-color: var(--vscode-input-background);
+                    color: var(--vscode-input-foreground);
+                    border: 1px solid var(--vscode-input-border);
+                    padding: 6px 8px;
+                    border-radius: 3px;
+                    font-size: 14px;
+                }
+                
+                .command-text-input {
+                    flex: 1;
+                    background-color: var(--vscode-input-background);
+                    color: var(--vscode-input-foreground);
+                    border: 1px solid var(--vscode-input-border);
+                    padding: 6px 8px;
+                    border-radius: 3px;
+                    font-family: monospace;
+                    font-size: 13px;
+                }
+                
+                .command-name-input:focus,
+                .command-text-input:focus {
+                    outline: 1px solid var(--vscode-focusBorder);
+                    border-color: var(--vscode-focusBorder);
+                }
+                
+                .run-button {
+                    background-color: var(--vscode-button-background);
+                    color: var(--vscode-button-foreground);
+                    border: none;
+                    padding: 6px 12px;
+                    border-radius: 3px;
+                    cursor: pointer;
+                    font-size: 12px;
+                    white-space: nowrap;
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                }
+                
+                .run-button:hover {
+                    background-color: var(--vscode-button-hoverBackground);
+                }
+                
+                .delete-button {
+                    background-color: var(--vscode-errorForeground);
+                    color: white;
+                    border: none;
+                    padding: 6px 8px;
+                    border-radius: 3px;
+                    cursor: pointer;
+                    font-size: 12px;
+                }
+                
+                .delete-button:hover {
+                    opacity: 0.8;
                 }
                 
                 .empty-state {
                     text-align: center;
                     padding: 40px;
                     opacity: 0.7;
+                    font-style: italic;
                 }
                 
-                .refresh-button {
-                    background-color: var(--vscode-button-secondaryBackground);
-                    color: var(--vscode-button-secondaryForeground);
-                    border: 1px solid var(--vscode-button-border);
-                    padding: 8px 16px;
+                .add-command-row {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    padding: 10px;
+                    background-color: var(--vscode-input-background);
+                    border: 2px dashed var(--vscode-input-border);
                     border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 12px;
+                    margin-top: 10px;
                 }
                 
-                .refresh-button:hover {
-                    background-color: var(--vscode-button-secondaryHoverBackground);
+                .icon {
+                    width: 16px;
+                    height: 16px;
+                    display: inline-block;
                 }
             </style>
         </head>
         <body>
             <div class="header">
                 <h1>CLI Command Buttons</h1>
-                <button class="refresh-button" onclick="refreshCommands()">Refresh</button>
+                <button class="add-button" onclick="addNewCommand()">+ Add Command</button>
             </div>
             
-            <div id="buttons-container" class="buttons-container">
-                <!-- Buttons will be populated by JavaScript -->
+            <div id="commands-container" class="commands-container">
+                <!-- Commands will be populated by JavaScript -->
+            </div>
+            
+            <div class="empty-state" id="empty-state" style="display: none;">
+                No commands configured. Click "Add Command" to get started!
             </div>
             
             <script>
                 const vscode = acquireVsCodeApi();
-                let commands = ${commandsJson};
+                let commands = [];
                 
-                function renderButtons() {
-                    const container = document.getElementById('buttons-container');
+                function renderCommands() {
+                    const container = document.getElementById('commands-container');
+                    const emptyState = document.getElementById('empty-state');
+                    
                     container.innerHTML = '';
                     
                     if (commands.length === 0) {
-                        container.innerHTML = '<div class="empty-state">No commands configured. Click "Add Command" to get started!</div>';
+                        emptyState.style.display = 'block';
+                        return;
+                    } else {
+                        emptyState.style.display = 'none';
                     }
                     
                     commands.forEach(cmd => {
-                        const button = document.createElement('div');
-                        button.className = 'command-button';
-                        button.innerHTML = \`
-                            <div class="command-name">\${cmd.name}</div>
-                            <div class="command-text">\${cmd.command}</div>
-                            <button class="delete-button" onclick="deleteCommand('\${cmd.id}')" title="Delete command">×</button>
+                        const row = document.createElement('div');
+                        row.className = 'command-row';
+                        row.innerHTML = \`
+                            <input 
+                                type="text" 
+                                class="command-name-input" 
+                                value="\${escapeHtml(cmd.name)}" 
+                                placeholder="Command Name"
+                                onblur="updateCommandName('\${cmd.id}', this.value)"
+                                onkeypress="handleKeyPress(event, () => updateCommandName('\${cmd.id}', this.value))"
+                            />
+                            <input 
+                                type="text" 
+                                class="command-text-input" 
+                                value="\${escapeHtml(cmd.command)}" 
+                                placeholder="CLI Command (e.g., npm run build)"
+                                onblur="updateCommandText('\${cmd.id}', this.value)"
+                                onkeypress="handleKeyPress(event, () => updateCommandText('\${cmd.id}', this.value))"
+                            />
+                            <button class="run-button" onclick="executeCommand('\${cmd.id}')">
+                                ▶ Run
+                            </button>
+                            <button class="delete-button" onclick="deleteCommand('\${cmd.id}')" title="Delete command">
+                                ×
+                            </button>
                         \`;
-                        button.onclick = (e) => {
-                            if (e.target.className !== 'delete-button') {
-                                executeCommand(cmd.command);
-                            }
-                        };
-                        container.appendChild(button);
+                        container.appendChild(row);
                     });
+                }
+                
+                function escapeHtml(text) {
+                    const div = document.createElement('div');
+                    div.textContent = text;
+                    return div.innerHTML;
+                }
+                
+                function handleKeyPress(event, callback) {
+                    if (event.key === 'Enter') {
+                        event.target.blur();
+                        callback();
+                    }
+                }
+                
+                function executeCommand(id) {
+                    const cmd = commands.find(c => c.id === id);
+                    if (cmd) {
+                        vscode.postMessage({
+                            type: 'executeCommand',
+                            command: cmd.command,
+                            name: cmd.name
+                        });
+                    }
+                }
+                
+                function updateCommandName(id, newName) {
+                    if (!newName.trim()) return;
                     
-                    // Add "Add Command" button
-                    const addButton = document.createElement('div');
-                    addButton.className = 'add-button';
-                    addButton.innerHTML = '+ Add Command';
-                    addButton.onclick = addCommand;
-                    container.appendChild(addButton);
+                    const cmd = commands.find(c => c.id === id);
+                    if (cmd && cmd.name !== newName.trim()) {
+                        cmd.name = newName.trim();
+                        vscode.postMessage({
+                            type: 'updateCommandName',
+                            id: id,
+                            name: newName.trim()
+                        });
+                    }
                 }
                 
-                function executeCommand(command) {
-                    vscode.postMessage({
-                        type: 'executeCommand',
-                        command: command
-                    });
-                }
-                
-                function addCommand() {
-                    vscode.postMessage({
-                        type: 'addCommand'
-                    });
+                function updateCommandText(id, newCommand) {
+                    if (!newCommand.trim()) return;
+                    
+                    const cmd = commands.find(c => c.id === id);
+                    if (cmd && cmd.command !== newCommand.trim()) {
+                        cmd.command = newCommand.trim();
+                        vscode.postMessage({
+                            type: 'updateCommandText',
+                            id: id,
+                            command: newCommand.trim()
+                        });
+                    }
                 }
                 
                 function deleteCommand(id) {
@@ -288,9 +347,17 @@ export class WebviewProvider {
                     });
                 }
                 
-                function refreshCommands() {
+                function addNewCommand() {
+                    const name = prompt('Enter command name:', 'New Command');
+                    if (!name || !name.trim()) return;
+                    
+                    const command = prompt('Enter CLI command:', '');
+                    if (!command || !command.trim()) return;
+                    
                     vscode.postMessage({
-                        type: 'refreshCommands'
+                        type: 'addCommand',
+                        name: name.trim(),
+                        command: command.trim()
                     });
                 }
                 
@@ -300,13 +367,13 @@ export class WebviewProvider {
                     switch (message.type) {
                         case 'updateCommands':
                             commands = message.commands;
-                            renderButtons();
+                            renderCommands();
                             break;
                     }
                 });
                 
-                // Initial render
-                renderButtons();
+                // Signal that webview is ready
+                vscode.postMessage({ type: 'ready' });
             </script>
         </body>
         </html>`;

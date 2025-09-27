@@ -9,9 +9,8 @@ export function activate(context: vscode.ExtensionContext) {
     // Register the tree data provider for the custom view container
     vscode.window.registerTreeDataProvider('cliCommandButtonsView', provider);
 
-    // Register commands
+    // Add command
     const addCommandCommand = vscode.commands.registerCommand('cli-command-buttons.addCommand', async () => {
-        // Check if workspace is open
         if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
             vscode.window.showWarningMessage('Please open a workspace folder to add project-specific commands.');
             return;
@@ -46,38 +45,85 @@ export function activate(context: vscode.ExtensionContext) {
         provider.addCommand(name.trim(), command.trim());
     });
 
+    // Edit command name
+    const editCommandNameCommand = vscode.commands.registerCommand('cli-command-buttons.editCommandName', async (item: any) => {
+        const currentCommand = provider.getCommand(item.id);
+        if (!currentCommand) return;
+
+        const newName = await vscode.window.showInputBox({
+            prompt: 'Edit command name',
+            value: currentCommand.name,
+            validateInput: (value) => {
+                if (!value.trim()) {
+                    return 'Command name cannot be empty';
+                }
+                return null;
+            }
+        });
+
+        if (newName !== undefined && newName.trim() !== currentCommand.name) {
+            provider.editCommandName(item.id, newName.trim());
+        }
+    });
+
+    // Edit command text
+    const editCommandTextCommand = vscode.commands.registerCommand('cli-command-buttons.editCommandText', async (item: any) => {
+        const currentCommand = provider.getCommand(item.id);
+        if (!currentCommand) return;
+
+        const newCommand = await vscode.window.showInputBox({
+            prompt: 'Edit CLI command',
+            value: currentCommand.command,
+            validateInput: (value) => {
+                if (!value.trim()) {
+                    return 'Command cannot be empty';
+                }
+                return null;
+            }
+        });
+
+        if (newCommand !== undefined && newCommand.trim() !== currentCommand.command) {
+            provider.editCommandText(item.id, newCommand.trim());
+        }
+    });
+
+    // Execute command
     const executeCommand = vscode.commands.registerCommand('cli-command-buttons.executeCommand', async (commandText: string, commandName: string) => {
         const terminal = await getOrCreateTerminal(commandName);
         
-        // Set working directory to current workspace folder
         const workspaceFolder = getCurrentWorkspaceFolder();
         if (workspaceFolder) {
-            // Change to workspace directory first
             terminal.sendText(`cd "${workspaceFolder}"`);
         }
         
         terminal.show();
         
-        // Small delay to ensure terminal is ready and cd command is executed
         setTimeout(() => {
             terminal.sendText(commandText);
         }, 200);
     });
 
+    // Delete command
     const deleteCommand = vscode.commands.registerCommand('cli-command-buttons.deleteCommand', (item: any) => {
         provider.deleteCommand(item.id);
     });
 
+    // Refresh
     const refreshCommand = vscode.commands.registerCommand('cli-command-buttons.refresh', () => {
         provider.refresh();
-        vscode.window.showInformationMessage('Command buttons refreshed!');
     });
 
-    context.subscriptions.push(addCommandCommand, executeCommand, deleteCommand, refreshCommand);
+    context.subscriptions.push(
+        addCommandCommand, 
+        editCommandNameCommand, 
+        editCommandTextCommand, 
+        executeCommand, 
+        deleteCommand, 
+        refreshCommand
+    );
 }
 
 function getCurrentWorkspaceFolder(): string | undefined {
-    // Try to get workspace folder from active editor first
     if (vscode.window.activeTextEditor) {
         const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.window.activeTextEditor.document.uri);
         if (workspaceFolder) {
@@ -85,7 +131,6 @@ function getCurrentWorkspaceFolder(): string | undefined {
         }
     }
 
-    // Fall back to first workspace folder
     if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
         return vscode.workspace.workspaceFolders[0].uri.fsPath;
     }
@@ -93,9 +138,6 @@ function getCurrentWorkspaceFolder(): string | undefined {
     return undefined;
 }
 
-/**
- * Get existing terminal or create a new one based on user settings
- */
 async function getOrCreateTerminal(commandName: string): Promise<vscode.Terminal> {
     const config = vscode.workspace.getConfiguration('cliCommandButtons');
     const terminalBehavior = config.get<TerminalBehavior>('terminalBehavior') || 'reuse';
@@ -115,40 +157,28 @@ async function getOrCreateTerminal(commandName: string): Promise<vscode.Terminal
             
         case 'reuse':
         default:
-            // Check if there's an active terminal first
             const currentActive = vscode.window.activeTerminal;
             if (currentActive && isTerminalIdle(currentActive)) {
                 return currentActive;
             }
             
-            // Look for any idle terminal
             for (const terminal of terminals) {
                 if (isTerminalIdle(terminal)) {
                     return terminal;
                 }
             }
             
-            // If no idle terminals found, create a new one
             return vscode.window.createTerminal(`CLI: ${commandName}`);
     }
 }
 
-/**
- * Check if terminal is likely idle (not running a command)
- * This is a best-effort check since VSCode doesn't provide direct access to terminal state
- */
 function isTerminalIdle(terminal: vscode.Terminal): boolean {
     try {
-        // Check if terminal is disposed or has exited
         if (terminal.exitStatus !== undefined) {
-            return false; // Terminal has exited
+            return false;
         }
-        
-        // Terminal exists and hasn't exited, assume it's idle
-        // Note: This is a limitation of VSCode API - we can't detect if a command is currently running
         return true;
     } catch (error) {
-        // If we can't check the terminal status, assume it's not idle
         return false;
     }
 }

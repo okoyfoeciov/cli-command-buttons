@@ -5,13 +5,16 @@ const vscode = require("vscode");
 const path = require("path");
 class CommandTreeItem extends vscode.TreeItem {
     constructor(commandItem, collapsibleState) {
-        super(commandItem.name, collapsibleState);
+        super('', collapsibleState); // Empty label, we'll use description
         this.commandItem = commandItem;
         this.collapsibleState = collapsibleState;
-        this.tooltip = `${commandItem.name}\n${commandItem.command}`;
+        // Display the command name as the main label
+        this.label = commandItem.name;
+        // Display the CLI command as description (smaller text)
         this.description = commandItem.command;
+        this.tooltip = `Name: ${commandItem.name}\nCommand: ${commandItem.command}\nClick to run, right-click to edit`;
         this.contextValue = 'commandItem';
-        // Set icon for the command
+        // Remove the play icon - use terminal icon instead
         this.iconPath = new vscode.ThemeIcon('terminal');
         // Set the command to execute when clicked
         this.command = {
@@ -19,7 +22,7 @@ class CommandTreeItem extends vscode.TreeItem {
             title: 'Execute Command',
             arguments: [commandItem.command, commandItem.name]
         };
-        // Store reference to the command item for deletion
+        // Store reference to the command item
         this.id = commandItem.id;
     }
 }
@@ -52,13 +55,12 @@ class CommandButtonsProvider {
     getChildren(element) {
         if (!element) {
             if (this.commands.length === 0) {
-                // Show different message based on whether we have a workspace
                 const workspaceFolder = this.getCurrentWorkspaceFolder();
                 const message = workspaceFolder
                     ? 'No commands for this project'
                     : 'No workspace opened';
                 const tooltip = workspaceFolder
-                    ? 'Click "Add New Command" to add project-specific commands'
+                    ? 'Click "+" to add project-specific commands'
                     : 'Open a folder/workspace to add project-specific commands';
                 const placeholderItem = new vscode.TreeItem(message, vscode.TreeItemCollapsibleState.None);
                 placeholderItem.tooltip = tooltip;
@@ -85,6 +87,25 @@ class CommandButtonsProvider {
         this.saveCommands();
         this.refresh();
     }
+    editCommandName(id, newName) {
+        const commandIndex = this.commands.findIndex(cmd => cmd.id === id);
+        if (commandIndex !== -1) {
+            this.commands[commandIndex].name = newName;
+            this.saveCommands();
+            this.refresh();
+        }
+    }
+    editCommandText(id, newCommand) {
+        const commandIndex = this.commands.findIndex(cmd => cmd.id === id);
+        if (commandIndex !== -1) {
+            this.commands[commandIndex].command = newCommand;
+            this.saveCommands();
+            this.refresh();
+        }
+    }
+    getCommand(id) {
+        return this.commands.find(cmd => cmd.id === id);
+    }
     deleteCommand(id) {
         this.commands = this.commands.filter(cmd => cmd.id !== id);
         this.saveCommands();
@@ -94,14 +115,12 @@ class CommandButtonsProvider {
         return this.commands;
     }
     getCurrentWorkspaceFolder() {
-        // Try to get workspace folder from active editor first
         if (vscode.window.activeTextEditor) {
             const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.window.activeTextEditor.document.uri);
             if (workspaceFolder) {
                 return workspaceFolder.uri.fsPath;
             }
         }
-        // Fall back to first workspace folder
         if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
             return vscode.workspace.workspaceFolders[0].uri.fsPath;
         }
@@ -110,10 +129,8 @@ class CommandButtonsProvider {
     getStorageKey() {
         const workspaceFolder = this.getCurrentWorkspaceFolder();
         if (!workspaceFolder) {
-            return 'cliCommands_global'; // Fallback for when no workspace is open
+            return 'cliCommands_global';
         }
-        // Create a unique key based on workspace folder path
-        // Use path.basename to get just the folder name for cleaner keys
         const folderName = path.basename(workspaceFolder);
         const folderHash = this.hashString(workspaceFolder);
         return `cliCommands_${folderName}_${folderHash}`;
@@ -123,7 +140,7 @@ class CommandButtonsProvider {
         for (let i = 0; i < str.length; i++) {
             const char = str.charCodeAt(i);
             hash = ((hash << 5) - hash) + char;
-            hash = hash & hash; // Convert to 32-bit integer
+            hash = hash & hash;
         }
         return Math.abs(hash).toString(16);
     }
@@ -138,10 +155,8 @@ class CommandButtonsProvider {
             this.commands = saved;
         }
         else {
-            // Start with empty commands array - no default commands
             this.commands = [];
         }
-        // Update current workspace folder reference
         this.currentWorkspaceFolder = this.getCurrentWorkspaceFolder();
         this.refresh();
     }
