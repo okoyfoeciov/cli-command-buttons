@@ -45,29 +45,8 @@ export function activate(context: vscode.ExtensionContext) {
         provider.addCommand(name.trim(), command.trim());
     });
 
-    // Edit command name
-    const editCommandNameCommand = vscode.commands.registerCommand('cli-command-buttons.editCommandName', async (item: any) => {
-        const currentCommand = provider.getCommand(item.id);
-        if (!currentCommand) return;
-
-        const newName = await vscode.window.showInputBox({
-            prompt: 'Edit command name',
-            value: currentCommand.name,
-            validateInput: (value) => {
-                if (!value.trim()) {
-                    return 'Command name cannot be empty';
-                }
-                return null;
-            }
-        });
-
-        if (newName !== undefined && newName.trim() !== currentCommand.name) {
-            provider.editCommandName(item.id, newName.trim());
-        }
-    });
-
-    // Edit command text
-    const editCommandTextCommand = vscode.commands.registerCommand('cli-command-buttons.editCommandText', async (item: any) => {
+    // Edit command (only CLI command, not name)
+    const editCommandCommand = vscode.commands.registerCommand('cli-command-buttons.editCommand', async (item: any) => {
         const currentCommand = provider.getCommand(item.id);
         if (!currentCommand) return;
 
@@ -83,7 +62,7 @@ export function activate(context: vscode.ExtensionContext) {
         });
 
         if (newCommand !== undefined && newCommand.trim() !== currentCommand.command) {
-            provider.editCommandText(item.id, newCommand.trim());
+            provider.editCommand(item.id, newCommand.trim());
         }
     });
 
@@ -115,8 +94,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         addCommandCommand, 
-        editCommandNameCommand, 
-        editCommandTextCommand, 
+        editCommandCommand, 
         executeCommand, 
         deleteCommand, 
         refreshCommand

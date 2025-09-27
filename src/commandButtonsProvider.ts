@@ -12,7 +12,7 @@ class CommandTreeItem extends vscode.TreeItem {
         public readonly commandItem: CommandItem,
         public readonly collapsibleState: vscode.TreeItemCollapsibleState
     ) {
-        super('', collapsibleState); // Empty label, we'll use description
+        super('', collapsibleState);
         
         // Display the command name as the main label
         this.label = commandItem.name;
@@ -22,7 +22,7 @@ class CommandTreeItem extends vscode.TreeItem {
         this.tooltip = `Name: ${commandItem.name}\nCommand: ${commandItem.command}\nClick to run, right-click to edit`;
         this.contextValue = 'commandItem';
         
-        // Remove the play icon - use terminal icon instead
+        // Use terminal icon
         this.iconPath = new vscode.ThemeIcon('terminal');
         
         // Set the command to execute when clicked
@@ -112,16 +112,7 @@ export class CommandButtonsProvider implements vscode.TreeDataProvider<CommandTr
         this.refresh();
     }
 
-    editCommandName(id: string, newName: string): void {
-        const commandIndex = this.commands.findIndex(cmd => cmd.id === id);
-        if (commandIndex !== -1) {
-            this.commands[commandIndex].name = newName;
-            this.saveCommands();
-            this.refresh();
-        }
-    }
-
-    editCommandText(id: string, newCommand: string): void {
+    editCommand(id: string, newCommand: string): void {
         const commandIndex = this.commands.findIndex(cmd => cmd.id === id);
         if (commandIndex !== -1) {
             this.commands[commandIndex].command = newCommand;

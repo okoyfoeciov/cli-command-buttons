@@ -5,7 +5,7 @@ const vscode = require("vscode");
 const path = require("path");
 class CommandTreeItem extends vscode.TreeItem {
     constructor(commandItem, collapsibleState) {
-        super('', collapsibleState); // Empty label, we'll use description
+        super('', collapsibleState);
         this.commandItem = commandItem;
         this.collapsibleState = collapsibleState;
         // Display the command name as the main label
@@ -14,7 +14,7 @@ class CommandTreeItem extends vscode.TreeItem {
         this.description = commandItem.command;
         this.tooltip = `Name: ${commandItem.name}\nCommand: ${commandItem.command}\nClick to run, right-click to edit`;
         this.contextValue = 'commandItem';
-        // Remove the play icon - use terminal icon instead
+        // Use terminal icon
         this.iconPath = new vscode.ThemeIcon('terminal');
         // Set the command to execute when clicked
         this.command = {
@@ -87,15 +87,7 @@ class CommandButtonsProvider {
         this.saveCommands();
         this.refresh();
     }
-    editCommandName(id, newName) {
-        const commandIndex = this.commands.findIndex(cmd => cmd.id === id);
-        if (commandIndex !== -1) {
-            this.commands[commandIndex].name = newName;
-            this.saveCommands();
-            this.refresh();
-        }
-    }
-    editCommandText(id, newCommand) {
+    editCommand(id, newCommand) {
         const commandIndex = this.commands.findIndex(cmd => cmd.id === id);
         if (commandIndex !== -1) {
             this.commands[commandIndex].command = newCommand;

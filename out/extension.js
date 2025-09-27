@@ -39,27 +39,8 @@ function activate(context) {
             return;
         provider.addCommand(name.trim(), command.trim());
     });
-    // Edit command name
-    const editCommandNameCommand = vscode.commands.registerCommand('cli-command-buttons.editCommandName', async (item) => {
-        const currentCommand = provider.getCommand(item.id);
-        if (!currentCommand)
-            return;
-        const newName = await vscode.window.showInputBox({
-            prompt: 'Edit command name',
-            value: currentCommand.name,
-            validateInput: (value) => {
-                if (!value.trim()) {
-                    return 'Command name cannot be empty';
-                }
-                return null;
-            }
-        });
-        if (newName !== undefined && newName.trim() !== currentCommand.name) {
-            provider.editCommandName(item.id, newName.trim());
-        }
-    });
-    // Edit command text
-    const editCommandTextCommand = vscode.commands.registerCommand('cli-command-buttons.editCommandText', async (item) => {
+    // Edit command (only CLI command, not name)
+    const editCommandCommand = vscode.commands.registerCommand('cli-command-buttons.editCommand', async (item) => {
         const currentCommand = provider.getCommand(item.id);
         if (!currentCommand)
             return;
@@ -74,7 +55,7 @@ function activate(context) {
             }
         });
         if (newCommand !== undefined && newCommand.trim() !== currentCommand.command) {
-            provider.editCommandText(item.id, newCommand.trim());
+            provider.editCommand(item.id, newCommand.trim());
         }
     });
     // Execute command
@@ -97,7 +78,7 @@ function activate(context) {
     const refreshCommand = vscode.commands.registerCommand('cli-command-buttons.refresh', () => {
         provider.refresh();
     });
-    context.subscriptions.push(addCommandCommand, editCommandNameCommand, editCommandTextCommand, executeCommand, deleteCommand, refreshCommand);
+    context.subscriptions.push(addCommandCommand, editCommandCommand, executeCommand, deleteCommand, refreshCommand);
 }
 exports.activate = activate;
 function getCurrentWorkspaceFolder() {

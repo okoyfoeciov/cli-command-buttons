@@ -22,11 +22,7 @@
         "cliCommandButtons.terminalBehavior": {
           "type": "string",
           "default": "reuse",
-          "enum": [
-            "reuse",
-            "alwaysNew",
-            "reuseActive"
-          ],
+          "enum": ["reuse", "alwaysNew", "reuseActive"],
           "enumDescriptions": [
             "Reuse any idle terminal",
             "Always create a new terminal",
@@ -49,15 +45,9 @@
         "category": "CLI Buttons"
       },
       {
-        "command": "cli-command-buttons.editCommandName",
-        "title": "Edit Command Name",
-        "icon": "$(edit)",
-        "category": "CLI Buttons"
-      },
-      {
-        "command": "cli-command-buttons.editCommandText",
+        "command": "cli-command-buttons.editCommand",
         "title": "Edit Command",
-        "icon": "$(code)",
+        "icon": "$(edit)",
         "category": "CLI Buttons"
       },
       {
@@ -106,19 +96,14 @@
       ],
       "view/item/context": [
         {
-          "command": "cli-command-buttons.editCommandName",
+          "command": "cli-command-buttons.editCommand",
           "when": "view == cliCommandButtonsView && viewItem == commandItem",
           "group": "inline@1"
         },
         {
-          "command": "cli-command-buttons.editCommandText",
-          "when": "view == cliCommandButtonsView && viewItem == commandItem",
-          "group": "inline@2"
-        },
-        {
           "command": "cli-command-buttons.deleteCommand",
           "when": "view == cliCommandButtonsView && viewItem == commandItem",
-          "group": "inline@3"
+          "group": "inline@2"
         }
       ]
     }
