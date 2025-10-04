@@ -2,19 +2,47 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deactivate = exports.activate = void 0;
 const vscode = require("vscode");
-const commandButtonsProvider_1 = require("./commandButtonsProvider");
+const globalCommandsProvider_1 = require("./globalCommandsProvider");
+const workspaceCommandsProvider_1 = require("./workspaceCommandsProvider");
 function activate(context) {
-    const provider = new commandButtonsProvider_1.CommandButtonsProvider(context);
-    // Register the tree data provider for the custom view container
-    vscode.window.registerTreeDataProvider('cliCommandButtonsView', provider);
-    // Add command
-    const addCommandCommand = vscode.commands.registerCommand('cli-command-buttons.addCommand', async () => {
+    const globalProvider = new globalCommandsProvider_1.GlobalCommandsProvider(context);
+    const workspaceProvider = new workspaceCommandsProvider_1.WorkspaceCommandsProvider(context);
+    vscode.window.registerTreeDataProvider('globalCommandsView', globalProvider);
+    vscode.window.registerTreeDataProvider('workspaceCommandsView', workspaceProvider);
+    const addGlobalCommandCommand = vscode.commands.registerCommand('cli-command-buttons.addGlobalCommand', async () => {
+        const name = await vscode.window.showInputBox({
+            prompt: 'Enter global command name',
+            placeHolder: 'e.g., System Info',
+            validateInput: (value) => {
+                if (!value.trim()) {
+                    return 'Command name cannot be empty';
+                }
+                return null;
+            }
+        });
+        if (!name)
+            return;
+        const command = await vscode.window.showInputBox({
+            prompt: 'Enter CLI command',
+            placeHolder: 'e.g., uname -a',
+            validateInput: (value) => {
+                if (!value.trim()) {
+                    return 'Command cannot be empty';
+                }
+                return null;
+            }
+        });
+        if (!command)
+            return;
+        globalProvider.addCommand(name.trim(), command.trim());
+    });
+    const addWorkspaceCommandCommand = vscode.commands.registerCommand('cli-command-buttons.addWorkspaceCommand', async () => {
         if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
-            vscode.window.showWarningMessage('Please open a workspace folder to add project-specific commands.');
+            vscode.window.showWarningMessage('Please open a workspace folder to add workspace-specific commands.');
             return;
         }
         const name = await vscode.window.showInputBox({
-            prompt: 'Enter command name',
+            prompt: 'Enter workspace command name',
             placeHolder: 'e.g., Build Project',
             validateInput: (value) => {
                 if (!value.trim()) {
@@ -37,11 +65,15 @@ function activate(context) {
         });
         if (!command)
             return;
-        provider.addCommand(name.trim(), command.trim());
+        workspaceProvider.addCommand(name.trim(), command.trim());
     });
-    // Edit command (only CLI command, not name)
     const editCommandCommand = vscode.commands.registerCommand('cli-command-buttons.editCommand', async (item) => {
-        const currentCommand = provider.getCommand(item.id);
+        let currentCommand = globalProvider.getCommand(item.id);
+        let isGlobal = true;
+        if (!currentCommand) {
+            currentCommand = workspaceProvider.getCommand(item.id);
+            isGlobal = false;
+        }
         if (!currentCommand)
             return;
         const newCommand = await vscode.window.showInputBox({
@@ -55,10 +87,14 @@ function activate(context) {
             }
         });
         if (newCommand !== undefined && newCommand.trim() !== currentCommand.command) {
-            provider.editCommand(item.id, newCommand.trim());
+            if (isGlobal) {
+                globalProvider.editCommand(item.id, newCommand.trim());
+            }
+            else {
+                workspaceProvider.editCommand(item.id, newCommand.trim());
+            }
         }
     });
-    // Execute command
     const executeCommand = vscode.commands.registerCommand('cli-command-buttons.executeCommand', async (commandText, commandName) => {
         const terminal = await getOrCreateTerminal(commandName);
         const workspaceFolder = getCurrentWorkspaceFolder();
@@ -70,15 +106,22 @@ function activate(context) {
             terminal.sendText(commandText);
         }, 200);
     });
-    // Delete command
     const deleteCommand = vscode.commands.registerCommand('cli-command-buttons.deleteCommand', (item) => {
-        provider.deleteCommand(item.id);
+        let commandFound = false;
+        if (globalProvider.getCommand(item.id)) {
+            globalProvider.deleteCommand(item.id);
+            commandFound = true;
+        }
+        else if (workspaceProvider.getCommand(item.id)) {
+            workspaceProvider.deleteCommand(item.id);
+            commandFound = true;
+        }
     });
-    // Refresh
     const refreshCommand = vscode.commands.registerCommand('cli-command-buttons.refresh', () => {
-        provider.refresh();
+        globalProvider.refresh();
+        workspaceProvider.refresh();
     });
-    context.subscriptions.push(addCommandCommand, editCommandCommand, executeCommand, deleteCommand, refreshCommand);
+    context.subscriptions.push(addGlobalCommandCommand, addWorkspaceCommandCommand, editCommandCommand, executeCommand, deleteCommand, refreshCommand);
 }
 exports.activate = activate;
 function getCurrentWorkspaceFolder() {

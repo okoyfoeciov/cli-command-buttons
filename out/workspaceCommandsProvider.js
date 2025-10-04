@@ -1,58 +1,36 @@
-import * as vscode from 'vscode';
-import * as path from 'path';
-
-export interface CommandItem {
-    id: string;
-    name: string;
-    command: string;
-}
-
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.WorkspaceCommandsProvider = void 0;
+const vscode = require("vscode");
+const path = require("path");
 class CommandTreeItem extends vscode.TreeItem {
-    constructor(
-        public readonly commandItem: CommandItem,
-        public readonly collapsibleState: vscode.TreeItemCollapsibleState
-    ) {
+    constructor(commandItem, collapsibleState) {
         super('', collapsibleState);
-        
-        // Display the command name as the main label
+        this.commandItem = commandItem;
+        this.collapsibleState = collapsibleState;
         this.label = commandItem.name;
-        // Display the CLI command as description (smaller text)
         this.description = commandItem.command;
-        
         this.tooltip = `Name: ${commandItem.name}\nCommand: ${commandItem.command}\nClick to run, right-click to edit`;
         this.contextValue = 'commandItem';
-        
-        // Use terminal icon
         this.iconPath = new vscode.ThemeIcon('terminal');
-        
-        // Set the command to execute when clicked
         this.command = {
             command: 'cli-command-buttons.executeCommand',
             title: 'Execute Command',
             arguments: [commandItem.command, commandItem.name]
         };
-        
-        // Store reference to the command item
         this.id = commandItem.id;
     }
 }
-
-export class CommandButtonsProvider implements vscode.TreeDataProvider<CommandTreeItem> {
-    private _onDidChangeTreeData: vscode.EventEmitter<CommandTreeItem | undefined | null | void> = new vscode.EventEmitter<CommandTreeItem | undefined | null | void>();
-    readonly onDidChangeTreeData: vscode.Event<CommandTreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
-
-    private commands: CommandItem[] = [];
-    private currentWorkspaceFolder: string | undefined;
-
-    constructor(private context: vscode.ExtensionContext) {
+class WorkspaceCommandsProvider {
+    constructor(context) {
+        this.context = context;
+        this._onDidChangeTreeData = new vscode.EventEmitter();
+        this.onDidChangeTreeData = this._onDidChangeTreeData.event;
+        this.commands = [];
         this.loadCommands();
-        
-        // Listen for workspace folder changes
         vscode.workspace.onDidChangeWorkspaceFolders(() => {
             this.loadCommands();
         });
-        
-        // Listen for active editor changes to detect workspace switches
         vscode.window.onDidChangeActiveTextEditor(() => {
             const newWorkspaceFolder = this.getCurrentWorkspaceFolder();
             if (newWorkspaceFolder !== this.currentWorkspaceFolder) {
@@ -61,48 +39,39 @@ export class CommandButtonsProvider implements vscode.TreeDataProvider<CommandTr
             }
         });
     }
-
-    refresh(): void {
+    refresh() {
         this._onDidChangeTreeData.fire();
     }
-
-    getTreeItem(element: CommandTreeItem): vscode.TreeItem {
+    getTreeItem(element) {
         return element;
     }
-
-    getChildren(element?: CommandTreeItem): Thenable<CommandTreeItem[]> {
+    getChildren(element) {
         if (!element) {
             if (this.commands.length === 0) {
                 const workspaceFolder = this.getCurrentWorkspaceFolder();
-                const message = workspaceFolder 
-                    ? 'No commands for this project' 
+                const message = workspaceFolder
+                    ? 'No commands for this workspace'
                     : 'No workspace opened';
-                const tooltip = workspaceFolder 
-                    ? 'Click "+" to add project-specific commands'
-                    : 'Open a folder/workspace to add project-specific commands';
-                
+                const tooltip = workspaceFolder
+                    ? 'Click "+" to add workspace-specific commands'
+                    : 'Open a folder/workspace to add workspace-specific commands';
                 const placeholderItem = new vscode.TreeItem(message, vscode.TreeItemCollapsibleState.None);
                 placeholderItem.tooltip = tooltip;
                 placeholderItem.iconPath = new vscode.ThemeIcon('info');
                 placeholderItem.contextValue = 'placeholder';
-                return Promise.resolve([placeholderItem as CommandTreeItem]);
+                return Promise.resolve([placeholderItem]);
             }
-            
-            return Promise.resolve(
-                this.commands.map(cmd => new CommandTreeItem(cmd, vscode.TreeItemCollapsibleState.None))
-            );
+            return Promise.resolve(this.commands.map(cmd => new CommandTreeItem(cmd, vscode.TreeItemCollapsibleState.None)));
         }
         return Promise.resolve([]);
     }
-
-    addCommand(name: string, command: string): void {
+    addCommand(name, command) {
         const workspaceFolder = this.getCurrentWorkspaceFolder();
         if (!workspaceFolder) {
-            vscode.window.showWarningMessage('Please open a workspace folder to add project-specific commands.');
+            vscode.window.showWarningMessage('Please open a workspace folder to add workspace-specific commands.');
             return;
         }
-
-        const newCommand: CommandItem = {
+        const newCommand = {
             id: Date.now().toString(),
             name,
             command
@@ -111,8 +80,7 @@ export class CommandButtonsProvider implements vscode.TreeDataProvider<CommandTr
         this.saveCommands();
         this.refresh();
     }
-
-    editCommand(id: string, newCommand: string): void {
+    editCommand(id, newCommand) {
         const commandIndex = this.commands.findIndex(cmd => cmd.id === id);
         if (commandIndex !== -1) {
             this.commands[commandIndex].command = newCommand;
@@ -120,48 +88,36 @@ export class CommandButtonsProvider implements vscode.TreeDataProvider<CommandTr
             this.refresh();
         }
     }
-
-    getCommand(id: string): CommandItem | undefined {
+    getCommand(id) {
         return this.commands.find(cmd => cmd.id === id);
     }
-
-    deleteCommand(id: string): void {
+    deleteCommand(id) {
         this.commands = this.commands.filter(cmd => cmd.id !== id);
         this.saveCommands();
         this.refresh();
     }
-
-    getCommands(): CommandItem[] {
-        return this.commands;
-    }
-
-    private getCurrentWorkspaceFolder(): string | undefined {
+    getCurrentWorkspaceFolder() {
         if (vscode.window.activeTextEditor) {
             const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.window.activeTextEditor.document.uri);
             if (workspaceFolder) {
                 return workspaceFolder.uri.fsPath;
             }
         }
-
         if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
             return vscode.workspace.workspaceFolders[0].uri.fsPath;
         }
-
         return undefined;
     }
-
-    private getStorageKey(): string {
+    getStorageKey() {
         const workspaceFolder = this.getCurrentWorkspaceFolder();
         if (!workspaceFolder) {
-            return 'cliCommands_global';
+            return 'workspaceCliCommands_global';
         }
-        
         const folderName = path.basename(workspaceFolder);
         const folderHash = this.hashString(workspaceFolder);
-        return `cliCommands_${folderName}_${folderHash}`;
+        return `workspaceCliCommands_${folderName}_${folderHash}`;
     }
-
-    private hashString(str: string): string {
+    hashString(str) {
         let hash = 0;
         for (let i = 0; i < str.length; i++) {
             const char = str.charCodeAt(i);
@@ -170,23 +126,22 @@ export class CommandButtonsProvider implements vscode.TreeDataProvider<CommandTr
         }
         return Math.abs(hash).toString(16);
     }
-
-    private saveCommands(): void {
+    saveCommands() {
         const storageKey = this.getStorageKey();
         this.context.globalState.update(storageKey, this.commands);
     }
-
-    private loadCommands(): void {
+    loadCommands() {
         const storageKey = this.getStorageKey();
-        const saved = this.context.globalState.get<CommandItem[]>(storageKey);
-        
+        const saved = this.context.globalState.get(storageKey);
         if (saved) {
             this.commands = saved;
-        } else {
+        }
+        else {
             this.commands = [];
         }
-        
         this.currentWorkspaceFolder = this.getCurrentWorkspaceFolder();
         this.refresh();
     }
 }
+exports.WorkspaceCommandsProvider = WorkspaceCommandsProvider;
+//# sourceMappingURL=workspaceCommandsProvider.js.map

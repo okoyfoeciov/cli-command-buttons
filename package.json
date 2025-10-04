@@ -38,8 +38,14 @@
     },
     "commands": [
       {
-        "command": "cli-command-buttons.addCommand",
-        "title": "Add New Command",
+        "command": "cli-command-buttons.addGlobalCommand",
+        "title": "Add New Global Command",
+        "icon": "$(add)",
+        "category": "CLI Buttons"
+      },
+      {
+        "command": "cli-command-buttons.addWorkspaceCommand",
+        "title": "Add New Workspace Command",
         "icon": "$(add)",
         "category": "CLI Buttons"
       },
@@ -79,8 +85,13 @@
     "views": {
       "cli-command-buttons": [
         {
-          "id": "cliCommandButtonsView",
-          "name": "Command Buttons",
+          "id": "globalCommandsView",
+          "name": "Global Commands",
+          "when": "true"
+        },
+        {
+          "id": "workspaceCommandsView",
+          "name": "Workspace Commands",
           "when": "true"
         }
       ]
@@ -88,25 +99,35 @@
     "menus": {
       "view/title": [
         {
-          "command": "cli-command-buttons.addCommand",
-          "when": "view == cliCommandButtonsView",
+          "command": "cli-command-buttons.addGlobalCommand",
+          "when": "view == globalCommandsView",
           "group": "navigation@1"
         },
         {
           "command": "cli-command-buttons.refresh",
-          "when": "view == cliCommandButtonsView",
+          "when": "view == globalCommandsView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "cli-command-buttons.addWorkspaceCommand",
+          "when": "view == workspaceCommandsView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cli-command-buttons.refresh",
+          "when": "view == workspaceCommandsView",
           "group": "navigation@2"
         }
       ],
       "view/item/context": [
         {
           "command": "cli-command-buttons.editCommand",
-          "when": "view == cliCommandButtonsView && viewItem == commandItem",
+          "when": "(view == globalCommandsView || view == workspaceCommandsView) && viewItem == commandItem",
           "group": "inline@1"
         },
         {
           "command": "cli-command-buttons.deleteCommand",
-          "when": "view == cliCommandButtonsView && viewItem == commandItem",
+          "when": "(view == globalCommandsView || view == workspaceCommandsView) && viewItem == commandItem",
           "group": "inline@2"
         }
       ]
