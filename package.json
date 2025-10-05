@@ -2,7 +2,7 @@
   "name": "cli-command-buttons",
   "displayName": "CLI Command Buttons",
   "description": "A VSCode extension with customizable CLI command buttons",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "engines": {
     "vscode": "^1.74.0"
   },
