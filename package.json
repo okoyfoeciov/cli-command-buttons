@@ -13,7 +13,7 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": ["onStartupFinished"],
   "main": "./out/extension.js",
   "contributes": {
     "configuration": {
@@ -33,6 +33,11 @@
             "Only reuse the active terminal"
           ],
           "description": "How to handle terminal selection when executing commands"
+        },
+        "cliCommandButtons.defaultProjectFolder": {
+          "type": "string",
+          "default": "",
+          "description": "Default folder for projects. Leave empty to use ~/Downloads. Use absolute path or ~ for home directory."
         }
       }
     },
@@ -70,6 +75,18 @@
         "command": "cli-command-buttons.refresh",
         "title": "Refresh",
         "icon": "$(refresh)",
+        "category": "CLI Buttons"
+      },
+      {
+        "command": "cli-command-buttons.openDownloadsFolder",
+        "title": "Open Projects Folder",
+        "icon": "$(folder-opened)",
+        "category": "CLI Buttons"
+      },
+      {
+        "command": "cli-command-buttons.createNewProject",
+        "title": "Create New Project",
+        "icon": "$(add)",
         "category": "CLI Buttons"
       }
     ],
