@@ -22,6 +22,204 @@ function getProjectFolder(): string {
     return path.join(os.homedir(), "Downloads");
 }
 
+const COMMAND_LANGUAGE_ID = "shellscript";
+
+function sanitizeForFileName(value: string): string {
+    const fallback = "command";
+    const sanitized = value.replace(/[^a-z0-9-_]+/gi, "-").replace(/-+/g, "-");
+    return (sanitized || fallback).slice(0, 100);
+}
+
+const isFileNotFoundError = (error: unknown): boolean =>
+    error instanceof vscode.FileSystemError && error.code === "FileNotFound";
+
+async function promptForCommandName(options: {
+    title: string;
+    placeHolder: string;
+    validate: (value: string) => string | null;
+}): Promise<string | undefined> {
+    // Use a QuickPick so users can type a fresh name and confirm with Enter.
+    const quickPick = vscode.window.createQuickPick();
+    quickPick.title = options.title;
+    quickPick.placeholder = options.placeHolder;
+    quickPick.ignoreFocusOut = true;
+    quickPick.items = [];
+
+    return await new Promise((resolve) => {
+        const dispose = () => {
+            quickPick.dispose();
+        };
+
+        quickPick.onDidAccept(() => {
+            const candidate = quickPick.value.trim();
+            const validationMessage = options.validate(candidate);
+            if (validationMessage) {
+                void vscode.window.showWarningMessage(validationMessage);
+                return;
+            }
+            resolve(candidate);
+            quickPick.hide();
+        });
+
+        quickPick.onDidHide(() => {
+            resolve(undefined);
+            dispose();
+        });
+
+        quickPick.show();
+    });
+}
+
+async function openCommandEditor(
+    context: vscode.ExtensionContext,
+    options: {
+        initialContent: string;
+        filePrefix: string;
+        onFinalize: (finalCommand: string) => Promise<void> | void;
+    },
+): Promise<void> {
+    // Mirror the edit flow by writing to a temp file and reacting when the tab closes.
+    let tempFileUriForCleanup: vscode.Uri | undefined;
+
+    const deleteTempFile = async () => {
+        if (!tempFileUriForCleanup) {
+            return;
+        }
+
+        try {
+            await vscode.workspace.fs.delete(tempFileUriForCleanup);
+        } catch (error) {
+            if (!isFileNotFoundError(error)) {
+                vscode.window.showErrorMessage(
+                    `Failed to remove temporary file: ${String(error)}`,
+                );
+            }
+        } finally {
+            tempFileUriForCleanup = undefined;
+        }
+    };
+
+    try {
+        const storageDir = context.globalStorageUri.fsPath;
+        await fs.promises.mkdir(storageDir, { recursive: true });
+
+        const tempFilePath = path.join(
+            storageDir,
+            `${options.filePrefix}-${Date.now()}.sh`,
+        );
+        await fs.promises.writeFile(
+            tempFilePath,
+            options.initialContent,
+            "utf8",
+        );
+
+        const tempFileUri = vscode.Uri.file(tempFilePath);
+        tempFileUriForCleanup = tempFileUri;
+
+        let tempDoc = await vscode.workspace.openTextDocument(tempFileUri);
+        await vscode.window.showTextDocument(tempDoc, {
+            preview: false,
+            viewColumn: vscode.ViewColumn.Active,
+        });
+        tempDoc = await vscode.languages.setTextDocumentLanguage(
+            tempDoc,
+            COMMAND_LANGUAGE_ID,
+        );
+
+        let latestCommand = tempDoc.getText();
+        let hasFinalized = false;
+
+        const isTempDocument = (uri: vscode.Uri) =>
+            uri.toString() === tempDoc.uri.toString();
+
+        const matchesTempTab = (tab: vscode.Tab): boolean => {
+            const input = tab.input;
+            if (!input) {
+                return false;
+            }
+
+            if (input instanceof vscode.TabInputText) {
+                return input.uri.toString() === tempDoc.uri.toString();
+            }
+
+            if (input instanceof vscode.TabInputTextDiff) {
+                return (
+                    input.original.toString() === tempDoc.uri.toString() ||
+                    input.modified.toString() === tempDoc.uri.toString()
+                );
+            }
+
+            return false;
+        };
+
+        const updateLatestFromDocument = (document: vscode.TextDocument) => {
+            if (document.uri.toString() === tempDoc.uri.toString()) {
+                latestCommand = document.getText();
+            }
+        };
+
+        let changeDisposable: vscode.Disposable | undefined;
+        let visibleEditorsDisposable: vscode.Disposable | undefined;
+        let closeDisposable: vscode.Disposable | undefined;
+
+        const finalize = async () => {
+            if (hasFinalized) {
+                return;
+            }
+            hasFinalized = true;
+
+            try {
+                await options.onFinalize(latestCommand.trim());
+            } catch (error) {
+                vscode.window.showErrorMessage(
+                    `Failed to save command: ${String(error)}`,
+                );
+            } finally {
+                changeDisposable?.dispose();
+                visibleEditorsDisposable?.dispose();
+                closeDisposable?.dispose();
+                await deleteTempFile();
+            }
+        };
+
+        changeDisposable = vscode.workspace.onDidChangeTextDocument(
+            (event) => {
+                updateLatestFromDocument(event.document);
+            },
+        );
+
+        visibleEditorsDisposable =
+            vscode.window.onDidChangeVisibleTextEditors(() => {
+                const tempTabOpen = vscode.window.tabGroups.all.some((group) =>
+                    group.tabs.some((tab) => matchesTempTab(tab))
+                );
+
+                if (!tempTabOpen) {
+                    void finalize();
+                }
+            });
+
+        closeDisposable = vscode.workspace.onDidCloseTextDocument(
+            async (closedDoc) => {
+                if (isTempDocument(closedDoc.uri)) {
+                    await finalize();
+                }
+            },
+        );
+
+        context.subscriptions.push(
+            changeDisposable,
+            visibleEditorsDisposable,
+            closeDisposable,
+        );
+    } catch (error) {
+        await deleteTempFile();
+        vscode.window.showErrorMessage(
+            `Failed to open editor: ${String(error)}`,
+        );
+    }
+}
+
 export function activate(context: vscode.ExtensionContext) {
     const globalProvider = new GlobalCommandsProvider(context);
     const workspaceProvider = new WorkspaceCommandsProvider(context);
@@ -222,31 +420,37 @@ export function activate(context: vscode.ExtensionContext) {
     const addGlobalCommandCommand = vscode.commands.registerCommand(
         "cli-command-buttons.addGlobalCommand",
         async () => {
-            const name = await vscode.window.showInputBox({
-                prompt: "Enter global command name",
-                placeHolder: "e.g., System Info",
-                validateInput: (value) => {
+            const name = await promptForCommandName({
+                title: "New Global CLI Command",
+                placeHolder: "Type a name and press Enter",
+                validate: (value) => {
                     if (!value.trim()) {
                         return "Command name cannot be empty";
                     }
                     return null;
                 },
             });
-            if (!name) return;
 
-            const command = await vscode.window.showInputBox({
-                prompt: "Enter CLI command",
-                placeHolder: "e.g., uname -a",
-                validateInput: (value) => {
-                    if (!value.trim()) {
-                        return "Command cannot be empty";
+            if (!name) {
+                return;
+            }
+
+            const trimmedName = name.trim();
+
+            await openCommandEditor(context, {
+                initialContent: "",
+                filePrefix: `command-create-global-${sanitizeForFileName(trimmedName)}`,
+                onFinalize: (finalCommand) => {
+                    if (!finalCommand) {
+                        vscode.window.showWarningMessage(
+                            "Command cannot be empty. The command was not created.",
+                        );
+                        return;
                     }
-                    return null;
+
+                    globalProvider.addCommand(trimmedName, finalCommand);
                 },
             });
-            if (!command) return;
-
-            globalProvider.addCommand(name.trim(), command.trim());
         },
     );
 
@@ -263,31 +467,37 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            const name = await vscode.window.showInputBox({
-                prompt: "Enter workspace command name",
-                placeHolder: "e.g., Build Project",
-                validateInput: (value) => {
+            const name = await promptForCommandName({
+                title: "New Workspace CLI Command",
+                placeHolder: "Type a name and press Enter",
+                validate: (value) => {
                     if (!value.trim()) {
                         return "Command name cannot be empty";
                     }
                     return null;
                 },
             });
-            if (!name) return;
 
-            const command = await vscode.window.showInputBox({
-                prompt: "Enter CLI command",
-                placeHolder: "e.g., npm run build",
-                validateInput: (value) => {
-                    if (!value.trim()) {
-                        return "Command cannot be empty";
+            if (!name) {
+                return;
+            }
+
+            const trimmedName = name.trim();
+
+            await openCommandEditor(context, {
+                initialContent: "",
+                filePrefix: `command-create-workspace-${sanitizeForFileName(trimmedName)}`,
+                onFinalize: (finalCommand) => {
+                    if (!finalCommand) {
+                        vscode.window.showWarningMessage(
+                            "Command cannot be empty. The command was not created.",
+                        );
+                        return;
                     }
-                    return null;
+
+                    workspaceProvider.addCommand(trimmedName, finalCommand);
                 },
             });
-            if (!command) return;
-
-            workspaceProvider.addCommand(name.trim(), command.trim());
         },
     );
 
@@ -302,29 +512,32 @@ export function activate(context: vscode.ExtensionContext) {
                 isGlobal = false;
             }
 
-            if (!currentCommand) return;
+            if (!currentCommand) {
+                return;
+            }
 
-            const newCommand = await vscode.window.showInputBox({
-                prompt: "Edit CLI command",
-                value: currentCommand.command,
-                validateInput: (value) => {
-                    if (!value.trim()) {
-                        return "Command cannot be empty";
+            const commandId = item.id;
+            const commandName = currentCommand.name;
+            const isGlobalCommand = isGlobal;
+
+            await openCommandEditor(context, {
+                initialContent: currentCommand.command,
+                filePrefix: `command-edit-${sanitizeForFileName(commandName)}-${commandId}`,
+                onFinalize: (finalCommand) => {
+                    if (!finalCommand) {
+                        vscode.window.showWarningMessage(
+                            "Command cannot be empty. No changes were made.",
+                        );
+                        return;
                     }
-                    return null;
+
+                    if (isGlobalCommand) {
+                        globalProvider.editCommand(commandId, finalCommand);
+                    } else {
+                        workspaceProvider.editCommand(commandId, finalCommand);
+                    }
                 },
             });
-
-            if (
-                newCommand !== undefined &&
-                newCommand.trim() !== currentCommand.command
-            ) {
-                if (isGlobal) {
-                    globalProvider.editCommand(item.id, newCommand.trim());
-                } else {
-                    workspaceProvider.editCommand(item.id, newCommand.trim());
-                }
-            }
         },
     );
     const executeCommand = vscode.commands.registerCommand(
